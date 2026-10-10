@@ -1,0 +1,19 @@
+# Test profile: in-memory H2 in PostgreSQL mode, so tests run without a database server.
+spring:
+  application:
+    name: management
+  datasource:
+    url: jdbc:h2:mem:leave_test;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    open-in-view: false
+
+app:
+  admin:
+    name: Test Admin
+    email: admin@company.com
+    password: admin123
