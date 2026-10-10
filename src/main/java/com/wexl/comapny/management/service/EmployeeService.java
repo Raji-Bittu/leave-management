@@ -65,6 +65,9 @@ public class EmployeeService {
 		if (losesManagerRole || deactivated) {
 			ensureHasNoActiveReports(employee);
 		}
+		if (employee.getRole() == Role.ADMIN && (request.role() != Role.ADMIN || deactivated)) {
+			ensureAnotherActiveAdmin(employee);
+		}
 		employee.setName(request.name().trim());
 		employee.setEmail(email);
 		employee.setRole(request.role());
@@ -80,6 +83,9 @@ public class EmployeeService {
 	public void deactivate(Long id) {
 		Employee employee = getEmployee(id);
 		ensureHasNoActiveReports(employee);
+		if (employee.getRole() == Role.ADMIN && employee.isActive()) {
+			ensureAnotherActiveAdmin(employee);
+		}
 		employee.setActive(false);
 	}
 
@@ -93,6 +99,16 @@ public class EmployeeService {
 	@Transactional(readOnly = true)
 	public Employee getEmployee(Long id) {
 		return employeeRepository.findById(id)
+				.orElseThrow(() -> new ResourceNotFoundException("Employee", id));
+	}
+
+	/**
+	 * Loads the employee and holds a row lock until the caller's transaction commits, so concurrent
+	 * operations for the same employee run one after another.
+	 */
+	@Transactional
+	public Employee getEmployeeForUpdate(Long id) {
+		return employeeRepository.findByIdForUpdate(id)
 				.orElseThrow(() -> new ResourceNotFoundException("Employee", id));
 	}
 
@@ -121,6 +137,13 @@ public class EmployeeService {
 		if (employeeRepository.existsByManagerIdAndActiveTrue(employee.getId())) {
 			throw new BusinessRuleException(
 					"Employee " + employee.getId() + " still manages active employees; reassign them first");
+		}
+	}
+
+	/** Without an active admin nobody can manage employees, and no new admin is seeded on restart. */
+	private void ensureAnotherActiveAdmin(Employee employee) {
+		if (!employeeRepository.existsByRoleAndActiveTrueAndIdNot(Role.ADMIN, employee.getId())) {
+			throw new BusinessRuleException("Employee " + employee.getId() + " is the last active admin");
 		}
 	}
 

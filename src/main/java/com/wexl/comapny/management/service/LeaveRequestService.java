@@ -42,9 +42,14 @@ public class LeaveRequestService {
 
 	@Transactional
 	public LeaveRequestResponse apply(Long employeeId, ApplyLeaveRequest request) {
-		Employee employee = employeeService.getEmployee(employeeId);
+		// Lock the employee first: without it, two simultaneous submissions both pass the overlap and
+		// balance checks below (neither sees the other's uncommitted row) and both get saved.
+		Employee employee = employeeService.getEmployeeForUpdate(employeeId);
 		if (employee.getManager() == null) {
 			throw new BusinessRuleException("You have no manager assigned, so your leave cannot be approved; contact an admin");
+		}
+		if (!employee.getManager().isActive()) {
+			throw new BusinessRuleException("Your manager is inactive, so your leave cannot be approved; contact an admin");
 		}
 		LeaveType type = leaveTypeService.getLeaveType(request.leaveTypeId());
 		if (!type.isActive()) {
@@ -105,6 +110,7 @@ public class LeaveRequestService {
 				if (!leave.getStartDate().isAfter(today())) {
 					throw new InvalidLeaveStateException("Approved leave can only be cancelled before it starts");
 				}
+				employeeService.getEmployeeForUpdate(employeeId);
 				LeaveBalance balance = getBalance(leave);
 				balance.setUsedDays(Math.max(0, balance.getUsedDays() - leave.getDays()));
 				leave.setStatus(LeaveStatus.CANCELLED);
@@ -126,6 +132,9 @@ public class LeaveRequestService {
 	@Transactional
 	public LeaveRequestResponse approve(Long managerId, Long requestId) {
 		LeaveRequest leave = getPendingRequestForManager(managerId, requestId);
+		// Same lock as apply(): moving days from "pending" to "used" while apply() is between reading the
+		// balance and summing pending days would make apply() miss this request's days entirely.
+		employeeService.getEmployeeForUpdate(leave.getEmployee().getId());
 		LeaveBalance balance = getBalance(leave);
 		if (leave.getDays() > balance.getAvailableDays()) {
 			throw new InsufficientLeaveBalanceException(leave.getDays(), balance.getAvailableDays());

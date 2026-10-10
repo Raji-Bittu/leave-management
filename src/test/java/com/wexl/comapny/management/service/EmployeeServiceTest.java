@@ -157,6 +157,41 @@ class EmployeeServiceTest {
 	}
 
 	@Test
+	void cannotDemoteLastActiveAdmin() {
+		when(employeeRepository.findById(1L)).thenReturn(Optional.of(employee(1L, Role.ADMIN)));
+		when(employeeRepository.existsByEmailIgnoreCaseAndIdNot("a@company.com", 1L)).thenReturn(false);
+		when(employeeRepository.existsByRoleAndActiveTrueAndIdNot(Role.ADMIN, 1L)).thenReturn(false);
+
+		assertThatThrownBy(() -> service.update(1L,
+				new UpdateEmployeeRequest("A", "a@company.com", null, Role.EMPLOYEE, true)))
+				.isInstanceOf(BusinessRuleException.class)
+				.hasMessageContaining("last active admin");
+	}
+
+	@Test
+	void cannotDeactivateLastActiveAdmin() {
+		Employee admin = employee(1L, Role.ADMIN);
+		when(employeeRepository.findById(1L)).thenReturn(Optional.of(admin));
+		when(employeeRepository.existsByRoleAndActiveTrueAndIdNot(Role.ADMIN, 1L)).thenReturn(false);
+
+		assertThatThrownBy(() -> service.deactivate(1L))
+				.isInstanceOf(BusinessRuleException.class)
+				.hasMessageContaining("last active admin");
+		assertThat(admin.isActive()).isTrue();
+	}
+
+	@Test
+	void canDeactivateAdminWhenAnotherIsActive() {
+		Employee admin = employee(1L, Role.ADMIN);
+		when(employeeRepository.findById(1L)).thenReturn(Optional.of(admin));
+		when(employeeRepository.existsByRoleAndActiveTrueAndIdNot(Role.ADMIN, 1L)).thenReturn(true);
+
+		service.deactivate(1L);
+
+		assertThat(admin.isActive()).isFalse();
+	}
+
+	@Test
 	void updateKeepsPasswordWhenNotSupplied() {
 		Employee employee = employee(2L, Role.EMPLOYEE);
 		employee.setPassword("old-hash");

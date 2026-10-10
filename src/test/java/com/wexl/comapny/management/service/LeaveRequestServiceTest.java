@@ -221,11 +221,22 @@ class LeaveRequestServiceTest {
 		@Test
 		void rejectsEmployeeWithoutManager() {
 			employee.setManager(null);
-			when(employeeService.getEmployee(2L)).thenReturn(employee);
+			when(employeeService.getEmployeeForUpdate(2L)).thenReturn(employee);
 
 			assertThatThrownBy(() -> service.apply(2L, apply(NEXT_MONDAY, NEXT_FRIDAY)))
 					.isInstanceOf(BusinessRuleException.class)
 					.hasMessageContaining("no manager");
+		}
+
+		@Test
+		void rejectsEmployeeWhoseManagerIsInactive() {
+			manager.setActive(false);
+			when(employeeService.getEmployeeForUpdate(2L)).thenReturn(employee);
+
+			assertThatThrownBy(() -> service.apply(2L, apply(NEXT_MONDAY, NEXT_FRIDAY)))
+					.isInstanceOf(BusinessRuleException.class)
+					.hasMessageContaining("manager is inactive");
+			verify(leaveRequestRepository, never()).save(any());
 		}
 
 		@Test
@@ -393,7 +404,7 @@ class LeaveRequestServiceTest {
 	// ---- helpers ----
 
 	private void stubEmployeeAndType() {
-		when(employeeService.getEmployee(2L)).thenReturn(employee);
+		when(employeeService.getEmployeeForUpdate(2L)).thenReturn(employee);
 		when(leaveTypeService.getLeaveType(10L)).thenReturn(annual);
 	}
 
